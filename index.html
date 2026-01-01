@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>IITB SQUAD TRACKER</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #000; -webkit-tap-highlight-color: transparent; font-family: sans-serif; }
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+        .box { width: 6px; height: 6px; display: inline-block; margin: 1px; border-radius: 1px; background: #1e293b; }
+        .filled { background: #f59e0b !important; box-shadow: 0 0 5px #f59e0b; }
+        .daily-btn.active { border-color: #f59e0b !important; background: #1e3a8a !important; }
+        .burn { font-weight: 900; color: #ff3300; text-shadow: 0 0 15px rgba(255, 51, 0, 0.8); letter-spacing: 1px; }
+        #battleCry { display: none; position: fixed; top: 20%; left: 50%; transform: translateX(-50%); z-index: 1000; }
+    </style>
+</head>
+<body class="text-slate-100 min-h-screen pb-10">
+
+    <div id="battleCry" class="glass border-amber-500 border-2 p-6 rounded-2xl text-center w-[80%] max-w-sm">
+        <h3 class="text-amber-500 font-black italic text-xl mb-1 uppercase">BATTLE CRY ⚔️</h3>
+        <p id="cryText" class="text-white font-bold italic uppercase"></p>
+    </div>
+
+    <div class="max-w-md mx-auto p-4">
+        <header class="text-center py-6">
+            <h1 class="text-4xl font-black italic uppercase tracking-tighter">Target: <span class="text-amber-500">IITB</span></h1>
+            <div id="countdown" class="text-red-400 font-mono text-xs font-bold mt-2 uppercase tracking-widest">---</div>
+        </header>
+
+        <div class="glass rounded-2xl p-4 mb-4 border border-amber-500/20">
+            <h2 class="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-3">Squad Progress 🏆</h2>
+            <div id="leaderboard" class="space-y-2">
+                <p class="text-center text-slate-600 text-[10px] italic">Connecting to Firebase...</p>
+            </div>
+        </div>
+
+        <div class="glass rounded-2xl p-4 mb-4 shadow-2xl">
+            <div class="flex justify-between items-end mb-3">
+                <div>
+                    <span class="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Your 2000H Grid</span>
+                    <div class="text-3xl font-black text-white leading-none"><span id="totalHours">0</span><span class="text-slate-600 text-sm">/2000</span></div>
+                </div>
+                <span id="percent" class="text-amber-500 font-black text-lg">0%</span>
+            </div>
+            <div id="grid" class="h-40 overflow-y-auto bg-black/50 p-2 rounded-lg border border-slate-800/50 leading-[0]"></div>
+        </div>
+
+        <div class="glass rounded-2xl p-5 shadow-2xl mb-8">
+            <h2 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 italic">Select Hours Completed Today:</h2>
+            <div id="dailyList" class="grid grid-cols-1 gap-2">
+                </div>
+            <button onclick="syncToMaster()" class="w-full mt-6 bg-amber-500 text-black font-black py-4 rounded-xl shadow-lg active:scale-95 transition-all uppercase tracking-widest text-sm">
+                SYNC TO SQUAD 🚀
+            </button>
+        </div>
+
+        <p class="text-center">
+            <span class="burn text-[12px] uppercase tracking-[0.2em]">Deadline Sept 30 2026</span>
+        </p>
+    </div>
+
+    <script>
+        // 1. DATABASE CONFIGURATION (PASTE YOUR URL HERE)
+        const DB_URL = "https://iitb-squad-default-rtdb.asia-southeast1.firebasedatabase.app/"; 
+
+        // 2. APP STATE
+        let total = localStorage.getItem('itb_total') ? parseInt(localStorage.getItem('itb_total')) : 0;
+        let dailyChecked = [false, false, false, false, false, false];
+        let myName = localStorage.getItem('itb_user_name');
+
+        if (!myName) {
+            myName = prompt("Enter your name for the Squad Board:").trim().toUpperCase();
+            localStorage.setItem('itb_user_name', myName || "WARRIOR");
+        }
+
+        const tasks = ["HOUR 1: DEEP WORK", "HOUR 2: PROBLEM SOLVING", "HOUR 3: CONCEPT BUILDING", "HOUR 4: 11TH REVISION", "HOUR 5: 12TH SYLLABUS", "HOUR 6: FORMULA REVIEW"];
+        const cries = ["POWAI IS WATCHING!", "OUTWORK THEM ALL!", "THE GRID GROWS!", "ONE STEP CLOSER!"];
+
+        // RENDER THE SELECTABLE HOUR BUTTONS
+        function renderDaily() {
+            const list = document.getElementById('dailyList');
+            list.innerHTML = tasks.map((t, i) => `
+                <button onclick="toggleHour(${i})" class="daily-btn w-full text-left p-4 rounded-xl border border-slate-800 bg-slate-900/50 flex justify-between items-center transition-all ${dailyChecked[i] ? 'active' : ''}">
+                    <span class="text-[11px] font-bold">${t}</span>
+                    <span class="text-xs">${dailyChecked[i] ? '🟡' : '⚪'}</span>
+                </button>
+            `).join('');
+        }
+
+        function toggleHour(i) {
+            dailyChecked[i] = !dailyChecked[i];
+            if(dailyChecked[i]) {
+                const cry = document.getElementById('battleCry');
+                document.getElementById('cryText').innerText = cries[Math.floor(Math.random()*cries.length)];
+                cry.style.display = 'block';
+                setTimeout(() => cry.style.display='none', 1500);
+            }
+            renderDaily();
+        }
+
+        async function syncToMaster() {
+            let count = dailyChecked.filter(x => x).length;
+            if(count === 0) return alert("Select at least 1 hour first!");
+            
+            total += count;
+            dailyChecked = [false, false, false, false, false, false];
+            localStorage.setItem('itb_total', total);
+            
+            // Sync to Firebase
+            try {
+                const data = { 
+                    hours: total, 
+                    lastUpdate: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                    percent: ((total/2000)*100).toFixed(1)
+                };
+                await fetch(`${DB_URL}squad/${myName}.json`, { method: 'PUT', body: JSON.stringify(data) });
+            } catch(e) { console.error("Firebase Sync Error"); }
+            
+            updateUI();
+        }
+
+        async function loadSquad() {
+            try {
+                const resp = await fetch(`${DB_URL}squad.json`);
+                const squad = await resp.json();
+                const container = document.getElementById('leaderboard');
+                if(!squad) return;
+                
+                container.innerHTML = Object.keys(squad).map(name => `
+                    <div class="flex justify-between items-center bg-black/40 p-2 rounded-lg border border-slate-800/50">
+                        <div>
+                            <span class="font-bold text-[10px] uppercase ${name === myName ? 'text-amber-500' : 'text-slate-300'}">${name}</span>
+                            <p class="text-[7px] text-slate-500 uppercase italic">Sync: ${squad[name].lastUpdate}</p>
+                        </div>
+                        <div class="text-right">
+                            <span class="font-black text-amber-500 text-sm">${squad[name].hours}H</span>
+                        </div>
+                    </div>
+                `).join('');
+            } catch(e) {}
+        }
+
+        function renderGrid() {
+            const grid = document.getElementById('grid');
+            grid.innerHTML = '';
+            for (let i = 0; i < 2000; i++) {
+                const b = document.createElement('div');
+                b.className = 'box' + (i < total ? ' filled' : '');
+                grid.appendChild(b);
+            }
+            document.getElementById('totalHours').innerText = total;
+            document.getElementById('percent').innerText = ((total/2000)*100).toFixed(1) + '%';
+        }
+
+        function updateUI() {
+            // Fix: Countdown Calculation
+            const diff = new Date('September 30, 2026') - new Date();
+            const days = Math.floor(diff/(1000*60*60*24));
+            document.getElementById('countdown').innerText = days + " DAYS UNTIL SEPT 30 2026";
+            
+            renderGrid();
+            renderDaily();
+            loadSquad();
+        }
+
+        // Refresh squad data every 15 seconds
+        setInterval(loadSquad, 15000);
+        updateUI();
+    </script>
+</body>
+</html
